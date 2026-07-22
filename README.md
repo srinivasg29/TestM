@@ -26,6 +26,17 @@ The two services are independently runnable processes with no shared database or
 
 The spec's literal endpoint table doesn't list one, but requirement #6 (Graceful Degradation) expects "Balance queries" to return a clear error when the Account Service is down — and the Account Service is explicitly internal-only. So the Gateway adds a thin passthrough, `GET /accounts/{accountId}/balance`, protected by the same resiliency policy as event submission.
 
+## Graceful Degradation
+
+When the Account Service is unreachable, the Gateway behaves differently per endpoint, verified in [`GatewayGracefulDegradationTest`](gateway-service/src/test/java/com/eventledger/gateway/integration/GatewayGracefulDegradationTest.java) and manually against real stopped/killed processes:
+
+| Endpoint | Behavior when Account Service is down |
+|---|---|
+| `POST /events` | `503 Service Unavailable` with a message to retry with the same `eventId` — never a `500`, never a hang (bounded by the circuit breaker + read timeout, see Resiliency below) |
+| `GET /events/{id}` | Unaffected — reads only from the Gateway's own H2 database |
+| `GET /events?account=` | Unaffected — same reason |
+| `GET /accounts/{accountId}/balance` | `503`, same as `POST /events`, since it has to call the Account Service |
+
 ## Design Decisions
 
 - **Idempotency (defense in depth)**: `eventId` is the dedup key on *both* services. The Gateway dedupes for the client-facing contract; the Account Service also dedupes so that a Gateway-side retry or replay can never double-apply a transaction. The Gateway persists an event as `PENDING`, calls the Account Service, and only marks it `APPLIED` on success — on failure the `PENDING` row is removed so the same `eventId` can be legitimately retried later instead of being stuck.
@@ -82,7 +93,7 @@ event-ledger/
 
 ## Setup
 
-**Prerequisites**: JDK 17+, Maven 3.9+ (or use the Maven wrapper once added), Docker + Docker Compose (optional, for containerized run).
+**Prerequisites**: JDK 17+, Maven 3.9+, Docker + Docker Compose (optional, for containerized run).
 
 ```bash
 mvn -f pom.xml install
@@ -120,9 +131,14 @@ curl http://localhost:8080/health
 mvn -f pom.xml test
 ```
 
+Runs 18 tests across both modules:
+
+- **Account Service** (9): idempotency (duplicate `eventId` doesn't double-apply), balance math (CREDIT − DEBIT), out-of-order arrival doesn't affect balance or chronological ordering, validation (missing fields, non-positive amount, unknown type), unknown-account balance defaults to zero.
+- **Gateway** (9): request validation; a cross-module integration test ([`GatewayAccountServiceIntegrationTest`](gateway-service/src/test/java/com/eventledger/gateway/integration/GatewayAccountServiceIntegrationTest.java)) that boots a real Account Service in-process and drives the full submit → duplicate → out-of-order → balance → listing flow over real HTTP; graceful degradation with the Account Service down or slow ([`GatewayGracefulDegradationTest`](gateway-service/src/test/java/com/eventledger/gateway/integration/GatewayGracefulDegradationTest.java)); the circuit breaker opening after repeated failures and short-circuiting subsequent calls without hitting the network ([`GatewayCircuitBreakerTest`](gateway-service/src/test/java/com/eventledger/gateway/integration/GatewayCircuitBreakerTest.java)); trace propagation via a well-formed `traceparent` header ([`GatewayTracePropagationTest`](gateway-service/src/test/java/com/eventledger/gateway/integration/GatewayTracePropagationTest.java)).
+
 ## Status
 
-Build is in progress; this checklist tracks what's landed so far.
+All planned work has landed:
 
 - [x] Maven multi-module scaffold (parent POM + `gateway-service` + `account-service`)
 - [x] Walking skeleton: both services boot with `/health` + structured JSON logging
@@ -132,4 +148,4 @@ Build is in progress; this checklist tracks what's landed so far.
 - [x] Resiliency: circuit breaker + timeout + metrics
 - [x] Distributed tracing (trace ID propagation, structured logs)
 - [x] Docker Compose
-- [ ] Final pass
+- [x] Final pass
