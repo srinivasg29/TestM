@@ -10,12 +10,16 @@ import com.eventledger.account.repository.TransactionRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AccountService {
+
+    private static final Logger log = LoggerFactory.getLogger(AccountService.class);
 
     private static final int RECENT_TRANSACTIONS_LIMIT = 20;
 
@@ -37,6 +41,8 @@ public class AccountService {
                 request.getAmount(), request.getCurrency(), request.getEventTimestamp(), Instant.now());
         try {
             TransactionEntity saved = transactionRepository.save(entity);
+            log.info("Applied transaction for event {} ({}) on account {}", saved.getEventId(), saved.getType(),
+                    saved.getAccountId());
             return new ApplyTransactionResult(TransactionResponse.from(saved), true);
         } catch (DataIntegrityViolationException e) {
             // Concurrent submission of the same eventId raced us to the unique constraint;

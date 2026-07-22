@@ -57,7 +57,8 @@ The spec's literal endpoint table doesn't list one, but requirement #6 (Graceful
 ## Observability
 
 - **Metrics**: both services expose `/actuator/prometheus`. Custom counters on the Gateway: `events_duplicate_total` (idempotent duplicate submissions) and `events_accountservice_rejected_total{reason=...}` (`unavailable` vs `circuit_open`). Resilience4j also auto-registers `resilience4j_circuitbreaker_state{name="accountService",state=...}`.
-- **Structured logs**: JSON via Logback + `logstash-logback-encoder`, tagged with `service`, `level`, `@timestamp`, `message` (trace/span IDs land here once tracing is wired up — see Status below).
+- **Structured logs**: JSON via Logback + `logstash-logback-encoder`, tagged with `service`, `level`, `@timestamp`, `message`, `traceId`, `spanId`.
+- **Distributed tracing**: Micrometer Tracing + OpenTelemetry bridge. The Gateway generates a trace for each incoming request (Spring Boot's tracing autoconfiguration, 100% sampled via `management.tracing.sampling.probability`) and propagates it to the Account Service as a W3C `traceparent` header, built explicitly from the current `TraceContext` at the `AccountServiceClient` call site (see the note in that class — Spring Boot's automatic `RestClient` observation-based propagation and Micrometer's `Propagator.inject()` both proved unreliable in this setup despite every relevant autoconfiguration matching, so the header is constructed directly instead). Both services also run a small `TracingMdcFilter` that copies the current span's `traceId`/`spanId` into SLF4J MDC per request, since Micrometer's OTel bridge (unlike its Brave bridge) doesn't do this automatically. Verified end-to-end: the same `traceId` appears in both services' JSON logs for a single request, with distinct `spanId`s.
 
 ## Tech Stack
 
@@ -121,6 +122,6 @@ Build is in progress; this checklist tracks what's landed so far.
 - [x] Gateway happy path (events, idempotency, out-of-order listing) + integration test
 - [x] Graceful degradation baseline
 - [x] Resiliency: circuit breaker + timeout + metrics
-- [ ] Distributed tracing (trace ID propagation, structured logs)
+- [x] Distributed tracing (trace ID propagation, structured logs)
 - [ ] Docker Compose
 - [ ] Final pass

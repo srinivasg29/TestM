@@ -7,6 +7,7 @@ import com.eventledger.gateway.client.AccountServiceClient;
 import com.eventledger.gateway.service.EventService;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import io.micrometer.tracing.Tracer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -35,6 +36,9 @@ class EventControllerValidationTest {
 
     @MockBean
     private AccountServiceClient accountServiceClient;
+
+    @MockBean
+    private Tracer tracer;
 
     @Test
     void rejectsMissingRequiredFields() throws Exception {
