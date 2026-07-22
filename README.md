@@ -30,7 +30,7 @@ The spec's literal endpoint table doesn't list one, but requirement #6 (Graceful
 
 - **Idempotency (defense in depth)**: `eventId` is the dedup key on *both* services. The Gateway dedupes for the client-facing contract; the Account Service also dedupes so that a Gateway-side retry or replay can never double-apply a transaction. The Gateway persists an event as `PENDING`, calls the Account Service, and only marks it `APPLIED` on success — on failure the `PENDING` row is removed so the same `eventId` can be legitimately retried later instead of being stuck.
 - **Out-of-order tolerance**: balance = sum(CREDIT) − sum(DEBIT), which is commutative — arrival order never affects the final balance, so no reordering/replay buffer is needed. The only ordering concern is presentation: `GET /events?account=` sorts by `eventTimestamp`, not insertion order.
-- **Resiliency pattern — Circuit Breaker + Timeout (Resilience4j)**: chosen over blind retries because a financial ledger should fail fast and predictably rather than risk retry-induced duplicate side effects. Combined with server-side idempotency on the Account Service, this is safe, and fail-fast protects the Gateway's threads from a hung downstream dependency.
+- **Resiliency pattern — Circuit Breaker + bounded timeout**: chosen over blind retries because a financial ledger should fail fast and predictably rather than risk retry-induced duplicate side effects. Combined with server-side idempotency on the Account Service, this is safe, and fail-fast protects the Gateway's threads from a hung downstream dependency. The timeout is a plain connect/read timeout on the `RestClient`'s `SimpleClientHttpRequestFactory` (`account-service.read-timeout-ms`, 2s by default) rather than Resilience4j's `@TimeLimiter`, since that annotation requires `CompletableFuture`-returning methods, which would complicate the call's JPA-transactional boundary for no real benefit here. `@CircuitBreaker` (Resilience4j) wraps the same call; once it trips open, calls short-circuit immediately via `CallNotPermittedException` without attempting the network call at all. Both failure modes (timeout/connection failure and an open circuit) map to a clean `503` telling the client to retry with the same `eventId`.
 - **`/health` is a literal plain path** on each service (not `/actuator/health`), implemented as a small controller that pings its own database and reports status directly, matching the spec's endpoint table.
 
 ## API Reference
@@ -53,6 +53,11 @@ The spec's literal endpoint table doesn't list one, but requirement #6 (Graceful
 | `GET` | `/accounts/{accountId}/balance` | Sum of CREDITs minus DEBITs; 0 for an account with no transactions |
 | `GET` | `/accounts/{accountId}` | Balance + up to 20 most recent transactions |
 | `GET` | `/health` | |
+
+## Observability
+
+- **Metrics**: both services expose `/actuator/prometheus`. Custom counters on the Gateway: `events_duplicate_total` (idempotent duplicate submissions) and `events_accountservice_rejected_total{reason=...}` (`unavailable` vs `circuit_open`). Resilience4j also auto-registers `resilience4j_circuitbreaker_state{name="accountService",state=...}`.
+- **Structured logs**: JSON via Logback + `logstash-logback-encoder`, tagged with `service`, `level`, `@timestamp`, `message` (trace/span IDs land here once tracing is wired up — see Status below).
 
 ## Tech Stack
 
@@ -115,7 +120,7 @@ Build is in progress; this checklist tracks what's landed so far.
 - [x] Account Service core (transactions, balance, idempotency)
 - [x] Gateway happy path (events, idempotency, out-of-order listing) + integration test
 - [x] Graceful degradation baseline
-- [ ] Resiliency: circuit breaker + timeout + metrics
+- [x] Resiliency: circuit breaker + timeout + metrics
 - [ ] Distributed tracing (trace ID propagation, structured logs)
 - [ ] Docker Compose
 - [ ] Final pass

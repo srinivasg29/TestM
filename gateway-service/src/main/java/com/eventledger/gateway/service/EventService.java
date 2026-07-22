@@ -7,6 +7,7 @@ import com.eventledger.gateway.entity.EventEntity;
 import com.eventledger.gateway.entity.EventStatus;
 import com.eventledger.gateway.exception.EventNotFoundException;
 import com.eventledger.gateway.repository.EventRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -18,10 +19,13 @@ public class EventService {
 
     private final EventRepository eventRepository;
     private final AccountServiceClient accountServiceClient;
+    private final MeterRegistry meterRegistry;
 
-    public EventService(EventRepository eventRepository, AccountServiceClient accountServiceClient) {
+    public EventService(EventRepository eventRepository, AccountServiceClient accountServiceClient,
+            MeterRegistry meterRegistry) {
         this.eventRepository = eventRepository;
         this.accountServiceClient = accountServiceClient;
+        this.meterRegistry = meterRegistry;
     }
 
     /**
@@ -35,6 +39,7 @@ public class EventService {
     public EventResult submitEvent(EventRequest request) {
         Optional<EventEntity> existing = eventRepository.findById(request.getEventId());
         if (existing.isPresent() && existing.get().getStatus() == EventStatus.APPLIED) {
+            meterRegistry.counter("events.duplicate").increment();
             return new EventResult(EventResponse.from(existing.get()), false);
         }
 

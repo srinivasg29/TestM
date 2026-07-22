@@ -27,12 +27,13 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 /**
- * Documents current behavior (before Commit 6 adds a circuit breaker + timeout) when the Account
- * Service is unreachable or slow. GET endpoints depend only on the Gateway's own H2 database, so
- * they're expected to keep working regardless. A fully unreachable Account Service is already
- * handled reasonably by AccountServiceClient's exception mapping (503, not a 500 or a hang) - the
- * real gap this class documents is that nothing bounds how long the Gateway will wait on a downstream
- * call that is merely slow, since no read timeout is configured on the RestClient yet.
+ * Documents Gateway behavior when the Account Service is unreachable or slow. GET endpoints depend
+ * only on the Gateway's own H2 database, so they're expected to keep working regardless. A fully
+ * unreachable Account Service is handled by AccountServiceClient's exception mapping (503, not a 500
+ * or a hang). Since Commit 6, a bounded read timeout (see AccountServiceClientConfig) also protects
+ * against a merely slow Account Service, so the Gateway no longer waits out an arbitrarily long
+ * downstream delay - see {@link GatewayCircuitBreakerTest} for the circuit breaker's own fast-fail
+ * behavior once repeated failures open the circuit.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class GatewayGracefulDegradationTest {
@@ -133,20 +134,21 @@ class GatewayGracefulDegradationTest {
     }
 
     @Test
-    void postEvents_currentlyHasNoTimeout_blocksForTheFullDelayOfASlowAccountService() {
-        int delayMillis = 3000;
+    void postEvents_failsFastWithTimeout_insteadOfBlockingOnASlowAccountService() {
+        int stubDelayMillis = 5000;
         ACCOUNT_SERVICE_STUB.stubFor(post(urlPathMatching("/accounts/.*/transactions"))
                 .willReturn(okJson(accountTransactionResponseJson("evt-slow", "acct-degraded-3"))
-                        .withFixedDelay(delayMillis)));
+                        .withFixedDelay(stubDelayMillis)));
 
         long start = System.nanoTime();
-        ResponseEntity<EventResponse> response = restTemplate.postForEntity(
-                url("/events"), event("evt-slow", "acct-degraded-3"), EventResponse.class);
+        ResponseEntity<String> response = restTemplate.postForEntity(
+                url("/events"), event("evt-slow", "acct-degraded-3"), String.class);
         long elapsedMillis = (System.nanoTime() - start) / 1_000_000;
 
-        // Documents the gap Commit 6 closes: with no timeout configured, the Gateway waits out the
-        // full downstream delay instead of failing fast, tying up its own thread the whole time.
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(elapsedMillis).isGreaterThanOrEqualTo(delayMillis);
+        // The configured read timeout (account-service.read-timeout-ms, 2000ms in application.yml)
+        // now bounds the wait: the Gateway fails fast with 503 well before the stub's 5s delay
+        // elapses, rather than tying up its own thread for the full downstream delay.
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(elapsedMillis).isLessThan(stubDelayMillis);
     }
 }
