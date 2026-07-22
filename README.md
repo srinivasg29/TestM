@@ -114,7 +114,7 @@ Build is in progress; this checklist tracks what's landed so far.
 - [x] Walking skeleton: both services boot with `/health` + structured JSON logging
 - [x] Account Service core (transactions, balance, idempotency)
 - [x] Gateway happy path (events, idempotency, out-of-order listing) + integration test
-- [ ] Graceful degradation baseline
+- [x] Graceful degradation baseline
 - [ ] Resiliency: circuit breaker + timeout + metrics
 - [ ] Distributed tracing (trace ID propagation, structured logs)
 - [ ] Docker Compose
