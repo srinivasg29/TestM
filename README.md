@@ -63,7 +63,21 @@ mvn -f pom.xml install
 
 ## Running the services
 
-> Manual and Docker Compose instructions will be filled in once both services have runnable entry points (see Status below).
+Manual (each in its own terminal, from the repo root):
+
+```bash
+mvn -f account-service/pom.xml spring-boot:run   # http://localhost:8081
+mvn -f gateway-service/pom.xml spring-boot:run   # http://localhost:8080
+```
+
+Check both are up:
+
+```bash
+curl http://localhost:8081/health
+curl http://localhost:8080/health
+```
+
+Docker Compose instructions will be added once `docker-compose.yml` lands (see Status below).
 
 ## Running tests
 
@@ -76,7 +90,7 @@ mvn -f pom.xml test
 Build is in progress; this checklist tracks what's landed so far.
 
 - [x] Maven multi-module scaffold (parent POM + `gateway-service` + `account-service`)
-- [ ] Walking skeleton: both services boot with `/health` + structured JSON logging
+- [x] Walking skeleton: both services boot with `/health` + structured JSON logging
 - [ ] Account Service core (transactions, balance, idempotency)
 - [ ] Gateway happy path (events, idempotency, out-of-order listing) + integration test
 - [ ] Graceful degradation baseline
