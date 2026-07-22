@@ -2,6 +2,7 @@ package com.eventledger.gateway.client;
 
 import com.eventledger.gateway.entity.EventEntity;
 import com.eventledger.gateway.exception.AccountServiceUnavailableException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -9,12 +10,15 @@ import org.springframework.web.client.RestClientException;
 @Component
 public class AccountServiceClient {
 
+    private static final String CIRCUIT_BREAKER_NAME = "accountService";
+
     private final RestClient restClient;
 
     public AccountServiceClient(RestClient accountServiceRestClient) {
         this.restClient = accountServiceRestClient;
     }
 
+    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME)
     public AccountTransactionResponse applyTransaction(EventEntity event) {
         AccountTransactionRequest request = new AccountTransactionRequest(event.getEventId(), event.getType(),
                 event.getAmount(), event.getCurrency(), event.getEventTimestamp());
@@ -30,6 +34,7 @@ public class AccountServiceClient {
         }
     }
 
+    @CircuitBreaker(name = CIRCUIT_BREAKER_NAME)
     public AccountBalanceResponse getBalance(String accountId) {
         try {
             return restClient.get()

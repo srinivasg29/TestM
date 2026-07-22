@@ -1,6 +1,8 @@
 package com.eventledger.gateway.exception;
 
 import com.eventledger.gateway.dto.ErrorResponse;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +18,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    private final MeterRegistry meterRegistry;
+
+    public GlobalExceptionHandler(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
@@ -48,9 +56,19 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccountServiceUnavailableException.class)
     public ResponseEntity<ErrorResponse> handleAccountServiceUnavailable(AccountServiceUnavailableException ex) {
         log.warn("Account Service unavailable: {}", ex.getMessage());
+        meterRegistry.counter("events.accountservice.rejected", "reason", "unavailable").increment();
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(new ErrorResponse(HttpStatus.SERVICE_UNAVAILABLE.value(), "Service Unavailable",
                         "Account Service is currently unreachable; the event was not applied. Please retry later with the same eventId."));
+    }
+
+    @ExceptionHandler(CallNotPermittedException.class)
+    public ResponseEntity<ErrorResponse> handleCircuitOpen(CallNotPermittedException ex) {
+        log.warn("Circuit breaker open for Account Service: {}", ex.getMessage());
+        meterRegistry.counter("events.accountservice.rejected", "reason", "circuit_open").increment();
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse(HttpStatus.SERVICE_UNAVAILABLE.value(), "Service Unavailable",
+                        "Account Service is currently unavailable (circuit breaker open); the event was not applied. Please retry later with the same eventId."));
     }
 
     @ExceptionHandler(Exception.class)
