@@ -10,7 +10,8 @@ import org.springframework.web.client.RestClient;
 public class AccountServiceClientConfig {
 
     @Bean
-    public RestClient accountServiceRestClient(@Value("${account-service.base-url}") String baseUrl,
+    public RestClient accountServiceRestClient(RestClient.Builder restClientBuilder,
+            @Value("${account-service.base-url}") String baseUrl,
             @Value("${account-service.connect-timeout-ms}") int connectTimeoutMs,
             @Value("${account-service.read-timeout-ms}") int readTimeoutMs) {
         // SimpleClientHttpRequestFactory (HttpURLConnection-based) rather than the JDK HttpClient
@@ -22,6 +23,6 @@ public class AccountServiceClientConfig {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(connectTimeoutMs);
         factory.setReadTimeout(readTimeoutMs);
-        return RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
+        return restClientBuilder.baseUrl(baseUrl).requestFactory(factory).build();
     }
 }

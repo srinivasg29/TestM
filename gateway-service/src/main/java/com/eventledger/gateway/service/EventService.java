@@ -11,11 +11,15 @@ import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class EventService {
+
+    private static final Logger log = LoggerFactory.getLogger(EventService.class);
 
     private final EventRepository eventRepository;
     private final AccountServiceClient accountServiceClient;
@@ -58,6 +62,7 @@ public class EventService {
 
         event.markApplied();
         eventRepository.save(event);
+        log.info("Applied event {} ({}) for account {}", event.getEventId(), event.getType(), event.getAccountId());
         return new EventResult(EventResponse.from(event), true);
     }
 
