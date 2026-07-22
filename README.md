@@ -33,6 +33,27 @@ The spec's literal endpoint table doesn't list one, but requirement #6 (Graceful
 - **Resiliency pattern — Circuit Breaker + Timeout (Resilience4j)**: chosen over blind retries because a financial ledger should fail fast and predictably rather than risk retry-induced duplicate side effects. Combined with server-side idempotency on the Account Service, this is safe, and fail-fast protects the Gateway's threads from a hung downstream dependency.
 - **`/health` is a literal plain path** on each service (not `/actuator/health`), implemented as a small controller that pings its own database and reports status directly, matching the spec's endpoint table.
 
+## API Reference
+
+**Event Gateway** (`localhost:8080`)
+
+| Method | Endpoint | Notes |
+|---|---|---|
+| `POST` | `/events` | 201 on first submission, 200 on a duplicate `eventId` (idempotent) |
+| `GET` | `/events/{id}` | 404 if unknown |
+| `GET` | `/events?account={accountId}` | Chronological by `eventTimestamp` |
+| `GET` | `/accounts/{accountId}/balance` | Passthrough to Account Service |
+| `GET` | `/health` | |
+
+**Account Service** (`localhost:8081`, internal only)
+
+| Method | Endpoint | Notes |
+|---|---|---|
+| `POST` | `/accounts/{accountId}/transactions` | 201 on first submission, 200 on a duplicate `eventId` |
+| `GET` | `/accounts/{accountId}/balance` | Sum of CREDITs minus DEBITs; 0 for an account with no transactions |
+| `GET` | `/accounts/{accountId}` | Balance + up to 20 most recent transactions |
+| `GET` | `/health` | |
+
 ## Tech Stack
 
 - Java 17, Spring Boot 3.3.4 (Web, Data JPA, Validation, Actuator)
@@ -92,7 +113,7 @@ Build is in progress; this checklist tracks what's landed so far.
 - [x] Maven multi-module scaffold (parent POM + `gateway-service` + `account-service`)
 - [x] Walking skeleton: both services boot with `/health` + structured JSON logging
 - [x] Account Service core (transactions, balance, idempotency)
-- [ ] Gateway happy path (events, idempotency, out-of-order listing) + integration test
+- [x] Gateway happy path (events, idempotency, out-of-order listing) + integration test
 - [ ] Graceful degradation baseline
 - [ ] Resiliency: circuit breaker + timeout + metrics
 - [ ] Distributed tracing (trace ID propagation, structured logs)
