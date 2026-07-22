@@ -74,9 +74,9 @@ The spec's literal endpoint table doesn't list one, but requirement #6 (Graceful
 ```
 event-ledger/
 ├── pom.xml                 # parent/reactor POM
-├── gateway-service/        # public-facing Event Gateway API
-├── account-service/        # internal Account Service
-├── docker-compose.yml      # (added once both services are runnable)
+├── gateway-service/        # public-facing Event Gateway API (+ Dockerfile)
+├── account-service/        # internal Account Service (+ Dockerfile)
+├── docker-compose.yml
 └── README.md
 ```
 
@@ -90,7 +90,17 @@ mvn -f pom.xml install
 
 ## Running the services
 
-Manual (each in its own terminal, from the repo root):
+**Docker Compose** (from the repo root):
+
+```bash
+docker compose up --build
+```
+
+Starts both services on a shared network — Account Service on `localhost:8081`, Gateway on `localhost:8080`. The Gateway waits for the Account Service's healthcheck to pass before starting (startup ordering only; the Gateway still degrades gracefully if the Account Service dies later — see Graceful Degradation above). Stop with `docker compose down`.
+
+> Note: this was validated by running the exact Maven build commands the Dockerfiles use (`mvn -f <module>/pom.xml -Dmaven.test.skip=true package`, confirming both produce the jar the Dockerfile expects), and by extensive manual verification of the underlying application behavior on temporary ports. Docker itself wasn't available in the environment this was built in, so `docker compose up` end-to-end hasn't been run — please verify on your machine before relying on it.
+
+**Manual** (each in its own terminal, from the repo root):
 
 ```bash
 mvn -f account-service/pom.xml spring-boot:run   # http://localhost:8081
@@ -103,8 +113,6 @@ Check both are up:
 curl http://localhost:8081/health
 curl http://localhost:8080/health
 ```
-
-Docker Compose instructions will be added once `docker-compose.yml` lands (see Status below).
 
 ## Running tests
 
@@ -123,5 +131,5 @@ Build is in progress; this checklist tracks what's landed so far.
 - [x] Graceful degradation baseline
 - [x] Resiliency: circuit breaker + timeout + metrics
 - [x] Distributed tracing (trace ID propagation, structured logs)
-- [ ] Docker Compose
+- [x] Docker Compose
 - [ ] Final pass
