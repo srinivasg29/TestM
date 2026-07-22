@@ -91,7 +91,7 @@ Build is in progress; this checklist tracks what's landed so far.
 
 - [x] Maven multi-module scaffold (parent POM + `gateway-service` + `account-service`)
 - [x] Walking skeleton: both services boot with `/health` + structured JSON logging
-- [ ] Account Service core (transactions, balance, idempotency)
+- [x] Account Service core (transactions, balance, idempotency)
 - [ ] Gateway happy path (events, idempotency, out-of-order listing) + integration test
 - [ ] Graceful degradation baseline
 - [ ] Resiliency: circuit breaker + timeout + metrics
